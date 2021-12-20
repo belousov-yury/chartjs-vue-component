@@ -14,18 +14,19 @@
       <div class="markers">
         <div v-if="markerEditing">
           <button @click="saveMarkerValue">Сохранить маркер</button>
-          <button @click="selectToMaximum">Установить на максимум</button>
+          <button @click="setToMaximum">Установить на максимум</button>
         </div>
         <button v-else @click="addMarker">Добавить маркер</button>
-        <div v-for="marker in markersList" :key="markersList.indexOf(marker)">
-          <div>
-            {{ markersList.indexOf(marker) + 1 }}.
-            {{ marker }}
-            <button @click="deleteMarker(marker)">✖</button>
-          </div>
-        </div>
         <div class="markers__markers-list">
-
+          <div v-for="(marker, index) in markersList"
+               :key="index"
+               class="markers__markers-list--item"
+               :class="{'item-select': marker?.isSelected}"
+               @click="markerSelect(marker)">
+            {{ index + 1 }}.
+            {{ marker.value }}
+            <button @click.stop="deleteMarker(marker)">✖</button>
+          </div>
         </div>
       </div>
       <button @click="exportChartImage">Сохранить график</button>
@@ -38,7 +39,7 @@
 import Vue3ChartJs from '@j-t-mcc/vue3-chartjs'
 import zoomPlugin from 'chartjs-plugin-zoom'
 import ChartDataLabels from 'chartjs-plugin-datalabels'
-import {onMounted, onUnmounted, ref, toRefs, watch} from "vue";
+import {onMounted, onUnmounted, ref, toRefs} from "vue";
 
 Vue3ChartJs.registerGlobalPlugins([zoomPlugin, ChartDataLabels])
 
@@ -107,6 +108,7 @@ export default {
     }
   },
   methods: {},
+
   setup(props) {
     const chartRef = ref(null)
     let markerEditing = ref(false)
@@ -133,7 +135,6 @@ export default {
     }
     let maximum = getMaxIndex(chartData1.value)
     let currentIndex = maximum
-    let selectedIndexes = ref([])
     let markersList = ref([])
 
     let datasets = []
@@ -240,31 +241,22 @@ export default {
             align: 'end',
             textAlign: 'center',
             display: (ctx) => {
-              if (markerEditing.value) {
-                if (selectedIndexes.value.includes(ctx.dataIndex)) return 1
-                if (ctx.datasetIndex === 0) return ctx.dataIndex === currentIndex ? 1 : 0
-                else return 0
+              if (isMarker(ctx.dataset.data[ctx.dataIndex]) || (ctx.dataIndex === currentIndex && markerEditing.value)) {
+                return 1
               } else {
-                if (ctx.datasetIndex === 0) {
-                  let flag = false
-                  selectedIndexes.value.forEach(value => {
-                    if (ctx.dataIndex === value) {
-                      flag = true
-                    }
-                  })
-                  return flag ? 1 : 0
-                }
+                return 0
               }
             },
             formatter: (value) => {
-              let ind = markersList.value.indexOf(value) !== -1 ? markersList.value.indexOf(value) + 1 : ''
+              const testId = getMarkerId(value)
+              let ind = testId !== -1 ? testId + 1 : ''
               return `${ind}\n▼`
             },
             color: (ctx) => {
               if (markerEditing.value && currentIndex === ctx.dataIndex) {
-                return 'red'
+                return 'rgb(197,83,79)'
               } else {
-                if (selectedIndexes.value.includes(ctx.dataIndex)) return 'rgb(235,190,107)'
+                if (isMarker(ctx.dataset.data[ctx.dataIndex])) return 'rgb(235,190,107)'
               }
             },
             font: {
@@ -288,6 +280,22 @@ export default {
       }]
     }
 
+    const isMarker = (testValue) => {
+      let flag = false
+      markersList.value.forEach(item => {
+        if (item.value.x === testValue.x && item.value.y === testValue.y) flag = true
+      })
+      return flag
+    }
+
+    const getMarkerId = (value) => {
+      let id = -1
+      markersList.value.forEach((item, index) => {
+        if (item.value.x === value.x && item.value.y === value.y) id = index
+      })
+      return id
+    }
+
     const exportChartImage = () => {
       let a = document.createElement('a')
       a.href = chartRef.value.chartJSState.chart.toBase64Image()
@@ -301,21 +309,37 @@ export default {
       markerEditing.value = true
       updateChart()
     }
+
     const deleteMarker = marker => {
       let delIndex = markersList.value.indexOf(marker)
       markersList.value.splice(delIndex, 1)
-      selectedIndexes.value.splice(delIndex, 1)
       updateChart()
     }
+
     const saveMarkerValue = () => {
-      if(markerEditing.value) {
-        selectedIndexes.value.push(currentIndex)
-        markersList.value = selectedIndexes.value.map(value => chartData1.value[value])
+      let newMarker = {value: chartData1.value[currentIndex], isSelected: false}
+
+      if (markerEditing.value && !isMarker(newMarker.value)) {
+        markersList.value.push(newMarker)
         markerEditing.value = false
-        updateChart()
+      } else {
+        alert('Данный маркер уже установлен')
+        markerEditing.value = false
       }
+      updateChart()
     }
-    const selectToMaximum = () => {
+
+    const changeMarkerValue = (marker) => {
+      console.log(marker)
+    }
+
+    const markerSelect = (marker) => {
+      let ind = getMarkerId(marker.value)
+      markersList.value[ind].isSelected = !markersList.value[ind].isSelected
+      updateChart()
+    }
+
+    const setToMaximum = () => {
       currentIndex = maximum
       updateChart()
     }
@@ -354,11 +378,6 @@ export default {
         chart.update()
       }
     }
-    watch(selectedIndexes, () => {
-      console.log(selectedIndexes)
-
-      console.log(markersList)
-    })
     onMounted(() => {
           document.addEventListener('keydown', keyHandler)
           let chart = chartRef.value.chartJSState.chart
@@ -394,7 +413,9 @@ export default {
       addMarker,
       saveMarkerValue,
       deleteMarker,
-      selectToMaximum
+      changeMarkerValue,
+      markerSelect,
+      setToMaximum
     }
   }
   ,
@@ -454,6 +475,16 @@ button:disabled:hover {
 }
 
 .markers__markers-list {
+  display: flex;
+  flex-direction: column;
+}
 
+.markers__markers-list--item {
+  cursor: pointer;
+  width: 100%;
+}
+
+.item-select {
+  background-color: red;
 }
 </style>
