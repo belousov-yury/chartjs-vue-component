@@ -17,19 +17,28 @@
           <button @click="setToMaximum">Установить на максимум</button>
         </div>
         <button v-else @click="addMarker">Добавить маркер</button>
+
         <div class="markers__markers-list">
           <div v-for="(marker, index) in markersList"
                :key="index"
                class="markers__markers-list--item"
                :class="{'item-select': marker?.isSelected}"
                @click="markerSelect(marker)">
-            {{ index + 1 }}.
-            {{ marker.value }}
+            <div :style="'background-color:' +  marker?.color" style="width: 15px; height: 15px;"></div>
+            <div>
+              {{ index + 1 }}.
+              {{ xAxisName }}: {{ marker.value.x }} {{ xAxisUnit }},
+              {{ yAxisName }}: {{ marker.value.y }} {{ yAxisUnit }}
+            </div>
+            <button @click.stop="resetZoom">✎</button>
             <button @click.stop="deleteMarker(marker)">✖</button>
           </div>
         </div>
       </div>
-      <button @click="exportChartImage">Сохранить график</button>
+      <div>
+        <button @click="resetZoom">Сбросить масштаб</button>
+        <button @click="exportChartImage">Сохранить график</button>
+      </div>
 
     </div>
   </div>
@@ -39,9 +48,10 @@
 import Vue3ChartJs from '@j-t-mcc/vue3-chartjs'
 import zoomPlugin from 'chartjs-plugin-zoom'
 import ChartDataLabels from 'chartjs-plugin-datalabels'
+import annotationPlugin from 'chartjs-plugin-annotation';
 import {onMounted, onUnmounted, ref, toRefs} from "vue";
 
-Vue3ChartJs.registerGlobalPlugins([zoomPlugin, ChartDataLabels])
+Vue3ChartJs.registerGlobalPlugins([zoomPlugin, ChartDataLabels, annotationPlugin])
 
 export default {
   name: 'Home',
@@ -51,40 +61,36 @@ export default {
   props: {
     chartData1: {
       type: Array,
-      default() {
-        return [
-          {x: 0, y: 50},
-          {x: 2, y: 60},
-          {x: 4, y: 50},
-          {x: 6, y: 30},
-          {x: 20, y: 19},
-          {x: 22, y: 70},
-          {x: 24, y: 13},
-          {x: 26, y: 15},
-          {x: 42, y: 3},
-          {x: 44, y: 60},
-          {x: 46, y: 3},
-          {x: 48, y: 32},
-          {x: 60, y: 44},
-          {x: 62, y: 5},
-          {x: 64, y: 56},
-          {x: 66, y: 5},
-          {x: 80, y: 22},
-          {x: 82, y: 33},
-          {x: 84, y: 2},
-          {x: 86, y: 12},
-          {x: 102, y: 22},
-          {x: 104, y: 27},
-          {x: 106, y: 80},
-          {x: 108, y: 55},
-        ]
-      }
+      default: () => [
+        {x: 0, y: 50},
+        {x: 2, y: 60},
+        {x: 4, y: 50},
+        {x: 6, y: 30},
+        {x: 20, y: 19},
+        {x: 22, y: 70},
+        {x: 24, y: 13},
+        {x: 26, y: 15},
+        {x: 42, y: 3},
+        {x: 44, y: 60},
+        {x: 46, y: 3},
+        {x: 48, y: 32},
+        {x: 60, y: 44},
+        {x: 62, y: 5},
+        {x: 64, y: 56},
+        {x: 66, y: 5},
+        {x: 80, y: 22},
+        {x: 82, y: 33},
+        {x: 84, y: 2},
+        {x: 86, y: 12},
+        {x: 102, y: 22},
+        {x: 104, y: 27},
+        {x: 106, y: 80},
+        {x: 108, y: 55},
+      ]
     },
     chartData2: {
       type: Array,
-      default() {
-        return []
-      }
+      default: () => []
     },
     xAxisName: {
       type: String,
@@ -93,6 +99,14 @@ export default {
     yAxisName: {
       type: String,
       default: 'Амплитуда'
+    },
+    xAxisUnit: {
+      type: String,
+      default: 'МГц'
+    },
+    yAxisUnit: {
+      type: String,
+      default: 'В'
     },
     legendName1: {
       type: String,
@@ -113,11 +127,22 @@ export default {
     const chartRef = ref(null)
     let markerEditing = ref(false)
 
+    const colors = [
+      'rgb(255,211,41)',
+      'rgb(38,90,255)',
+      'rgb(255,93,51)',
+      'rgb(227,41,160)',
+      'rgb(125,93,218)',
+      'rgb(89,255,203)'
+    ]
+
     const {
       chartData1,
       chartData2,
       xAxisName,
       yAxisName,
+      xAxisUnit,
+      yAxisUnit,
       legendName1,
       legendName2
     } = toRefs(props)
@@ -154,13 +179,24 @@ export default {
       data: {
         datasets: datasets
       },
+
       options: {
         interaction: {
           intersect: false,
           mode: 'index',
         },
-        pointBackgroundColor: 'rgba(255, 159, 64, 1)',
-        pointBorderColor: 'rgba(153, 102, 255, 0.5)',
+        animation: {
+          duration: 500
+        },
+        pointBackgroundColor: (ctx) => {
+          if (ctx.index === currentIndex) {
+            return 'rgb(215,37,31)'
+          } else {
+            return 'rgba(255, 159, 64, 1)'
+          }
+        },
+        // pointBorderColor: 'rgba(69,111,170, 0.4)',
+        pointBorderColor: 'transparent',
         pointRadius: 4,
         borderColor: [
           'rgb(88,149,44)',
@@ -177,10 +213,11 @@ export default {
           x: {
             title: {
               display: true,
-              text: xAxisName.value,
+              text: xAxisName.value + ',' + xAxisUnit.value,
               color: 'rgb(204,203,203)'
             },
-            min: 0,
+            min: chartData1.value[0]?.x - 1,
+            max: chartData1.value[chartData1.value.length - 1]?.x + 1,
             grid: {
               color: 'rgb(100,100,97)',
               z: 0,
@@ -193,15 +230,13 @@ export default {
           y: {
             title: {
               display: true,
-              text: yAxisName.value,
+              text: yAxisName.value + ',' + yAxisUnit.value,
               color: 'rgb(204,203,203)',
             },
             ticks: {
               color: 'rgb(222,222,222)',
             },
-            min: 0,
-            max: 100
-            ,
+            max: chartData1.value[getMaxIndex(chartData1.value)]?.y + 7,
             grid: {
               color: 'rgb(100,100,97)',
               z: 0,
@@ -221,7 +256,19 @@ export default {
               wheel: {
                 enabled: true,
               },
+              drag: {
+                enabled: true,
+                modifierKey: 'ctrl'
+              },
+              animation: {
+                duration: 1000,
+                easing: 'easeOutCubic'
+              }
             },
+            drag: {
+              enabled: true,
+              threshold: 1
+            }
           },
           legend: {
             labels: {
@@ -235,35 +282,125 @@ export default {
             displayColors: false,
             position: 'nearest',
           },
+          annotation: {
+            annotations: {
+              annotation2: {
+                type: 'point',
+                backgroundColor: 'rgb(215,37,31)',
+                borderColor: 'transparent',
+                pointStyle: 'triangle',
+                radius: 12,
+                rotation: 180,
+                scaleID: 'y',
+                yAdjust: -22,
+                xValue: (ctx) => value(ctx, 1, 4, 'x'),
+                yValue: (ctx) => value(ctx, 1, 4, 'y')
+              }
+            }
+          },
           datalabels: {
-            backgroundColor: 'rgba(0,0,0,0)',
-            borderRadius: 10,
-            align: 'end',
-            textAlign: 'center',
-            display: (ctx) => {
-              if (isMarker(ctx.dataset.data[ctx.dataIndex]) || (ctx.dataIndex === currentIndex && markerEditing.value)) {
-                return 1
-              } else {
-                return 0
+            labels: {
+              index: {
+                backgroundColor: 'rgba(0,0,0,0)',
+                borderRadius: 30,
+                textShadowBlur: 2,
+                padding:{
+                  bottom: 0
+                },
+                borderColor: ctx => {
+                  if (getMarker(ctx.dataIndex).isSelected) {
+                    return colors[getMarkerId(ctx.dataset.data[ctx.dataIndex])]
+                  }
+                  return 'rgba(0,0,0,1)'
+                },
+                borderWidth: ctx => {
+                  if (getMarker(ctx.dataIndex).isSelected) {
+                    return 2
+                  }
+                  return 0
+                },
+                textShadowColor: 'rgba(0,0,0,1)',
+                align: 'end',
+                textAlign: 'center',
+                display: (ctx) => {
+                  if (isMarkerToIndex(ctx.dataIndex) || (ctx.dataIndex === currentIndex && markerEditing.value)) {
+                    return 1
+                  } else {
+                    return 0
+                  }
+                },
+                formatter: (value, ctx) => {
+                  const testId = getMarkerId(value)
+                  let ind = testId !== -1 ? testId + 1 : ''
+                  if (ctx.dataIndex === currentIndex) {
+                    return `${ind}`
+                  } else {
+                    return `${ind}`
+                  }
+                },
+                color: (ctx) => {
+                  if (isMarkerToIndex(ctx.dataIndex)) {
+                    return colors[getMarkerId(ctx.dataset.data[ctx.dataIndex])]
+                  }
+                },
+                font: {
+                  size: 25,
+                  weight: 'bold'
+                },
+                // offset: ctx => {
+                //   if (isMarkerToIndex(ctx.dataIndex) && ctx.dataIndex === currentIndex) {
+                //     return 30
+                //   } else {
+                //     return 0
+                //   }
+                // },
+                offset: 22
+              },
+              mark: {
+                backgroundColor: 'rgba(0,0,0,0)',
+                borderRadius: 30,
+                textShadowBlur: 2,
+                padding:{
+                  bottom: 0
+                },
+                textShadowColor: 'rgba(0,0,0,1)',
+                align: 'end',
+                textAlign: 'center',
+                display: (ctx) => {
+                  if (isMarkerToIndex(ctx.dataIndex) || (ctx.dataIndex === currentIndex && markerEditing.value)) {
+                    return 1
+                  } else {
+                    return 0
+                  }
+                },
+                formatter: (value, ctx) => {
+                  if (ctx.dataIndex === currentIndex) {
+                    return ``
+                  } else {
+                    return `▼`
+                  }
+                },
+                color: (ctx) => {
+                  if (isMarkerToIndex(ctx.dataIndex)) {
+                    return colors[getMarkerId(ctx.dataset.data[ctx.dataIndex])]
+                  }
+                },
+                font: {
+                  size: 25,
+                  weight: 'bold'
+                },
+                offset: ctx => {
+                  if (isMarkerToIndex(ctx.dataIndex) && ctx.dataIndex === currentIndex) {
+                    return 30
+                  } else {
+                    return 0
+                  }
+                }
               }
-            },
-            formatter: (value) => {
-              const testId = getMarkerId(value)
-              let ind = testId !== -1 ? testId + 1 : ''
-              return `${ind}\n▼`
-            },
-            color: (ctx) => {
-              if (markerEditing.value && currentIndex === ctx.dataIndex) {
-                return 'rgb(197,83,79)'
-              } else {
-                if (isMarker(ctx.dataset.data[ctx.dataIndex])) return 'rgb(235,190,107)'
-              }
-            },
-            font: {
-              size: 25,
-              weight: 'bold'
-            },
-          }
+            }
+
+
+          },
         },
       },
 
@@ -280,7 +417,13 @@ export default {
       }]
     }
 
-    const isMarker = (testValue) => {
+    function value(ctx, datasetIndex, index, prop) {
+      const meta = ctx.chart.getDatasetMeta(0)
+      const parsed = meta.controller.getParsed(currentIndex)
+      return parsed ? parsed[prop] : NaN
+    }
+
+    const isMarkerToValue = (testValue) => {
       let flag = false
       markersList.value.forEach(item => {
         if (item.value.x === testValue.x && item.value.y === testValue.y) flag = true
@@ -288,12 +431,31 @@ export default {
       return flag
     }
 
+    const isMarkerToIndex = index => {
+      let flag = false
+      markersList.value.forEach(item => {
+        if (item.dataIndex === index) flag = true
+      })
+      return flag
+    }
+
     const getMarkerId = (value) => {
       let id = -1
-      markersList.value.forEach((item, index) => {
-        if (item.value.x === value.x && item.value.y === value.y) id = index
-      })
+      if (markersList.value) {
+        markersList.value.forEach((item, index) => {
+          if (item.value.x === value.x && item.value.y === value.y) id = index
+        })
+      }
       return id
+    }
+    const getMarker = dataIndex => {
+      let marker = null
+      markersList.value.forEach(item => {
+        if (item.dataIndex === dataIndex) {
+          marker = item
+        }
+      })
+      return marker
     }
 
     const exportChartImage = () => {
@@ -304,29 +466,48 @@ export default {
       a.click()
       a = null
     }
+    const resetZoom = () => {
+      chartRef.value.chartJSState.chart.resetZoom('none')
+    }
 
     const addMarker = () => {
-      markerEditing.value = true
-      updateChart()
+      if (markersList.value.length < 6) {
+        markerEditing.value = true
+        updateChart()
+      } else {
+        markerEditing.value = false
+        alert('Максимальное число маркеров: 6')
+      }
     }
 
     const deleteMarker = marker => {
       let delIndex = markersList.value.indexOf(marker)
       markersList.value.splice(delIndex, 1)
+      markersList.value.forEach((item, index) => item.color = colors[index])
       updateChart()
+
     }
 
     const saveMarkerValue = () => {
-      let newMarker = {value: chartData1.value[currentIndex], isSelected: false}
-
-      if (markerEditing.value && !isMarker(newMarker.value)) {
-        markersList.value.push(newMarker)
-        markerEditing.value = false
+      if (markersList.value.length < 6) {
+        let newMarker = {
+          value: chartData1.value[currentIndex],
+          isSelected: false,
+          dataIndex: currentIndex,
+          color: colors[markersList.value.length]
+        }
+        if (markerEditing.value && !isMarkerToValue(newMarker.value)) {
+          markersList.value.push(newMarker)
+          markerEditing.value = false
+        } else {
+          alert('Данный маркер уже установлен')
+          markerEditing.value = false
+        }
+        updateChart()
       } else {
-        alert('Данный маркер уже установлен')
         markerEditing.value = false
+        alert('Максимальное число маркеров: 6')
       }
-      updateChart()
     }
 
     const changeMarkerValue = (marker) => {
@@ -344,11 +525,15 @@ export default {
       updateChart()
     }
     const rightSelectPoint = () => {
-      currentIndex++
+      if (currentIndex < chartData1.value.length - 1) {
+        currentIndex++
+      }
       updateChart()
     }
     const leftSelectPoint = () => {
-      currentIndex--
+      if (currentIndex > 0) {
+        currentIndex--
+      }
       updateChart()
     }
 
@@ -378,27 +563,27 @@ export default {
         chart.update()
       }
     }
+    const dblClickHandler = () => {
+      let chart = chartRef.value.chartJSState.chart
+      const activeElement = chart.getActiveElements()[0]
+      if (activeElement.datasetIndex === 0) {
+        currentIndex = activeElement.index
+        markerEditing.value = true
+        saveMarkerValue()
+      }
+    }
     onMounted(() => {
           document.addEventListener('keydown', keyHandler)
           let chart = chartRef.value.chartJSState.chart
-          chart.canvas.addEventListener('click', () => {
-            clickHandler()
-          })
-
-          //
-          // chart.tooltip.setActiveElements([{datasetIndex: 0, index: 5}, {datasetIndex: 0, index: 7}, {
-          //   datasetIndex: 0,
-          //   index: 10
-          // }], {x: 10, y: 10})
-
+          chart.canvas.addEventListener('click', clickHandler)
+          chart.canvas.addEventListener('dblclick', dblClickHandler)
           chart.update()
         }
     )
     onUnmounted(() => {
-          document.removeEventListener('keydown', keyHandler)
-          chartRef.value.chartJSState.chart.canvas.removeEventListener('click', () => {
-            clickHandler()
-          })
+          document.removeEventListener('wheel', keyHandler)
+          chartRef.value.chartJSState.chart.canvas.removeEventListener('click', clickHandler)
+          chartRef.value.chartJSState.chart.canvas.removeEventListener('dblclick', dblClickHandler)
         }
     )
 
@@ -407,6 +592,7 @@ export default {
       chartRef,
       markerEditing,
       markersList,
+      resetZoom,
       exportChartImage,
       rightSelectPoint,
       leftSelectPoint,
@@ -472,6 +658,7 @@ button:disabled:hover {
   width: 100%;
   height: 100%;
   display: flex;
+
 }
 
 .markers__markers-list {
@@ -480,6 +667,9 @@ button:disabled:hover {
 }
 
 .markers__markers-list--item {
+  display: flex;
+  align-items: center;
+  min-width: 30%;
   cursor: pointer;
   width: 100%;
 }
