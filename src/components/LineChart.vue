@@ -1,5 +1,5 @@
 <template>
-  <div class="chart-container">
+  <div class="chart-container" ref="containerRef">
     <vue3-chart-js
         :id="lineChart.id"
         :type="lineChart.type"
@@ -10,32 +10,38 @@
 
     />
     <div v-if="isControlPanel" class="control-container">
+      <div class="markers-control">
+        <button @click="addMarker">Добавить маркер</button>
+        <button @click="cancelMarkersSelect">Отменить выделения</button>
+      </div>
 
-      <div class="markers">
-        <div v-if="markerEditing">
-          <button @click="saveMarkerValue">Сохранить маркер</button>
-          <button @click="setToMaximum">Установить на максимум</button>
-        </div>
-        <button v-else @click="addMarker">Добавить маркер</button>
 
-        <div class="markers__markers-list">
-          <div v-for="(marker, index) in markersList"
-               :key="index"
-               class="markers__markers-list--item"
+      <div class="markers-list">
+        <div class="markers-list__container">
+          <div v-for="marker in markersList"
+               :key="marker.id"
+               class="markers-list__item"
                :class="{'item-select': marker?.isSelected}"
                @click="markerSelect(marker)">
-            <div :style="'background-color:' +  marker?.color" style="width: 15px; height: 15px;"></div>
+            <div :style="'background-color:' +  marker?.color"
+                 style="width: 15px; height: 15px; border-radius: 3px;"></div>
             <div>
-              {{ index + 1 }}.
+              {{ marker.id + 1 }}.
               {{ xAxisName }}: {{ marker.value.x }} {{ xAxisUnit }},
               {{ yAxisName }}: {{ marker.value.y }} {{ yAxisUnit }}
             </div>
-            <button @click.stop="resetZoom">✎</button>
             <button @click.stop="deleteMarker(marker)">✖</button>
           </div>
         </div>
+
       </div>
-      <div>
+
+      <div class="set-control">
+        <button @click="setToMaximum">Установить на максимум</button>
+        <button @click="setToMaximumLeft">Максимум влево</button>
+        <button @click="setToMaximumRight">Максимум вправо</button>
+      </div>
+      <div class="chart-control">
         <button @click="resetZoom">Сбросить масштаб</button>
         <button @click="exportChartImage">Сохранить график</button>
       </div>
@@ -71,7 +77,7 @@ export default {
         {x: 24, y: 13},
         {x: 26, y: 15},
         {x: 42, y: 3},
-        {x: 44, y: 60},
+        {x: 44, y: 100},
         {x: 46, y: 3},
         {x: 48, y: 32},
         {x: 60, y: 44},
@@ -106,7 +112,7 @@ export default {
     },
     yAxisUnit: {
       type: String,
-      default: 'В'
+      default: 'дБ'
     },
     legendName1: {
       type: String,
@@ -122,9 +128,10 @@ export default {
     }
   },
   methods: {},
-
   setup(props) {
     const chartRef = ref(null)
+    const containerRef = ref(null)
+
     let markerEditing = ref(false)
 
     const colors = [
@@ -147,6 +154,42 @@ export default {
       legendName2
     } = toRefs(props)
 
+    const updateMaximumList = (data) => {
+      maximumList = []
+      maximumList.push(mainMaximum)
+
+      if (mainMaximum > 1) {
+        let earlySymbol = '-'
+        for (let i = mainMaximum - 1; i >= 0; i--) {
+          let symbol
+          if (data[i].y < data[i + 1].y) {
+            symbol = '-'
+          } else {
+            symbol = '+'
+          }
+          if (earlySymbol === '+' && symbol === '-') {
+            maximumList.unshift(i + 1)
+          }
+          earlySymbol = symbol
+        }
+      }
+      if (data.length - mainMaximum + 1 > 1) {
+        let earlySymbol = '-'
+        for (let i = mainMaximum + 1; i < data.length; i++) {
+          let symbol
+          if (data[i].y < data[i - 1].y) {
+            symbol = '-'
+          } else {
+            symbol = '+'
+          }
+          if (earlySymbol === '+' && symbol === '-') {
+            maximumList.push(i - 1)
+          }
+          earlySymbol = symbol
+        }
+      }
+    }
+
     const getMaxIndex = (array) => {
       let max = array[0].y
       let index = 0
@@ -158,9 +201,14 @@ export default {
       })
       return index
     }
-    let maximum = getMaxIndex(chartData1.value)
-    let currentIndex = maximum
+    let maximumList = []
+    let mainMaximum = getMaxIndex(chartData1.value)
+    updateMaximumList(chartData1.value)
+
+    let currentIndex = mainMaximum
     let markersList = ref([])
+    let changeMarkerIndex = null
+    let markersSelectedCount = 0
 
     let datasets = []
     if (chartData1.value.length) datasets.push({
@@ -186,7 +234,7 @@ export default {
           mode: 'index',
         },
         animation: {
-          duration: 500
+          duration: 0
         },
         pointBackgroundColor: (ctx) => {
           if (ctx.index === currentIndex) {
@@ -281,18 +329,29 @@ export default {
             intersect: false,
             displayColors: false,
             position: 'nearest',
+            callbacks: {
+              title: (ctx) => {
+                return `${xAxisName.value}: ${ctx[0].label} ${xAxisUnit.value}\n${yAxisName.value}: ${ctx[0].formattedValue} ${yAxisUnit.value}`
+              },
+              label: () => null
+            }
           },
           annotation: {
             annotations: {
               annotation2: {
+                display: () => markerEditing.value ? 1 : 0,
                 type: 'point',
                 backgroundColor: 'rgb(215,37,31)',
                 borderColor: 'transparent',
                 pointStyle: 'triangle',
-                radius: 12,
+                radius: () => {
+                  return chartRef.value.chartRef.width / 160
+                },
                 rotation: 180,
                 scaleID: 'y',
-                yAdjust: -22,
+                yAdjust: () => {
+                  return -chartRef.value.chartRef.width / 80
+                },
                 xValue: (ctx) => value(ctx, 1, 4, 'x'),
                 yValue: (ctx) => value(ctx, 1, 4, 'y')
               }
@@ -304,24 +363,24 @@ export default {
                 backgroundColor: 'rgba(0,0,0,0)',
                 borderRadius: 30,
                 textShadowBlur: 2,
-                padding:{
+                textShadowColor: 'rgba(0,0,0,1)',
+                align: 'end',
+                textAlign: 'center',
+                padding: {
                   bottom: 0
                 },
                 borderColor: ctx => {
-                  if (getMarker(ctx.dataIndex).isSelected) {
+                  if (getMarker(ctx.dataIndex)?.isSelected) {
                     return colors[getMarkerId(ctx.dataset.data[ctx.dataIndex])]
                   }
-                  return 'rgba(0,0,0,1)'
+                  return 'rgba(0,0,0,0)'
                 },
                 borderWidth: ctx => {
-                  if (getMarker(ctx.dataIndex).isSelected) {
+                  if (getMarker(ctx.dataIndex)?.isSelected) {
                     return 2
                   }
                   return 0
                 },
-                textShadowColor: 'rgba(0,0,0,1)',
-                align: 'end',
-                textAlign: 'center',
                 display: (ctx) => {
                   if (isMarkerToIndex(ctx.dataIndex) || (ctx.dataIndex === currentIndex && markerEditing.value)) {
                     return 1
@@ -329,77 +388,57 @@ export default {
                     return 0
                   }
                 },
-                formatter: (value, ctx) => {
+                formatter: (value) => {
                   const testId = getMarkerId(value)
                   let ind = testId !== -1 ? testId + 1 : ''
-                  if (ctx.dataIndex === currentIndex) {
-                    return `${ind}`
-                  } else {
-                    return `${ind}`
-                  }
+                  return `${ind}`
                 },
                 color: (ctx) => {
                   if (isMarkerToIndex(ctx.dataIndex)) {
                     return colors[getMarkerId(ctx.dataset.data[ctx.dataIndex])]
                   }
                 },
-                font: {
-                  size: 25,
-                  weight: 'bold'
+                font: () => {
+                  return {
+                    size: getFontSize(),
+                    weight: 'bold'
+                  }
                 },
-                // offset: ctx => {
-                //   if (isMarkerToIndex(ctx.dataIndex) && ctx.dataIndex === currentIndex) {
-                //     return 30
-                //   } else {
-                //     return 0
-                //   }
-                // },
-                offset: 22
+                offset: () => {
+                  let width = chartRef.value.chartRef.width
+                  return width / 79
+                }
               },
               mark: {
                 backgroundColor: 'rgba(0,0,0,0)',
                 borderRadius: 30,
-                textShadowBlur: 2,
-                padding:{
-                  bottom: 0
-                },
                 textShadowColor: 'rgba(0,0,0,1)',
                 align: 'end',
                 textAlign: 'center',
                 display: (ctx) => {
-                  if (isMarkerToIndex(ctx.dataIndex) || (ctx.dataIndex === currentIndex && markerEditing.value)) {
+                  if (isMarkerToIndex(ctx.dataIndex)) {
                     return 1
                   } else {
                     return 0
                   }
                 },
-                formatter: (value, ctx) => {
-                  if (ctx.dataIndex === currentIndex) {
-                    return ``
-                  } else {
-                    return `▼`
-                  }
+                formatter: () => {
+                  return `▼`
                 },
                 color: (ctx) => {
                   if (isMarkerToIndex(ctx.dataIndex)) {
                     return colors[getMarkerId(ctx.dataset.data[ctx.dataIndex])]
                   }
                 },
-                font: {
-                  size: 25,
-                  weight: 'bold'
-                },
-                offset: ctx => {
-                  if (isMarkerToIndex(ctx.dataIndex) && ctx.dataIndex === currentIndex) {
-                    return 30
-                  } else {
-                    return 0
+                font: () => {
+                  return {
+                    size: getFontSize(),
+                    weight: 'bold'
                   }
-                }
+                },
+                offset: 0
               }
             }
-
-
           },
         },
       },
@@ -407,12 +446,12 @@ export default {
       plugins: [{
         id: 'custom_canvas_background_color',
         beforeDraw: (chart) => {
-          const ctx = chart.canvas.getContext('2d');
-          ctx.save();
-          ctx.globalCompositeOperation = 'destination-over';
-          ctx.fillStyle = 'rgb(60,63,64)';
-          ctx.fillRect(0, 0, chart.width, chart.height);
-          ctx.restore();
+          const ctx = chart.canvas.getContext('2d')
+          ctx.save()
+          ctx.globalCompositeOperation = 'destination-over'
+          ctx.fillStyle = 'rgb(60,63,64)'
+          ctx.fillRect(0, 0, chart.width, chart.height)
+          ctx.restore()
         }
       }]
     }
@@ -423,13 +462,13 @@ export default {
       return parsed ? parsed[prop] : NaN
     }
 
-    const isMarkerToValue = (testValue) => {
-      let flag = false
-      markersList.value.forEach(item => {
-        if (item.value.x === testValue.x && item.value.y === testValue.y) flag = true
-      })
-      return flag
-    }
+    // const isMarkerToValue = (testValue) => {
+    //   let flag = false
+    //   markersList.value.forEach(item => {
+    //     if (item.value.x === testValue.x && item.value.y === testValue.y) flag = true
+    //   })
+    //   return flag
+    // }
 
     const isMarkerToIndex = index => {
       let flag = false
@@ -472,7 +511,7 @@ export default {
 
     const addMarker = () => {
       if (markersList.value.length < 6) {
-        markerEditing.value = true
+        saveMarkerValue()
         updateChart()
       } else {
         markerEditing.value = false
@@ -483,7 +522,10 @@ export default {
     const deleteMarker = marker => {
       let delIndex = markersList.value.indexOf(marker)
       markersList.value.splice(delIndex, 1)
-      markersList.value.forEach((item, index) => item.color = colors[index])
+      markersList.value.forEach((item, index) => {
+        item.color = colors[index]
+        item.id = index
+      })
       updateChart()
 
     }
@@ -491,18 +533,14 @@ export default {
     const saveMarkerValue = () => {
       if (markersList.value.length < 6) {
         let newMarker = {
+          id: markersList.value.length,
           value: chartData1.value[currentIndex],
           isSelected: false,
           dataIndex: currentIndex,
           color: colors[markersList.value.length]
         }
-        if (markerEditing.value && !isMarkerToValue(newMarker.value)) {
-          markersList.value.push(newMarker)
-          markerEditing.value = false
-        } else {
-          alert('Данный маркер уже установлен')
-          markerEditing.value = false
-        }
+        markersList.value.push(newMarker)
+        markerEditing.value = false
         updateChart()
       } else {
         markerEditing.value = false
@@ -510,30 +548,92 @@ export default {
       }
     }
 
-    const changeMarkerValue = (marker) => {
-      console.log(marker)
+    const changeMarkerValue = () => {
+      markersList.value.forEach((item, index) => {
+        if (item.isSelected) {
+          changeMarkerIndex = index
+          currentIndex = item.dataIndex
+        }
+      })
+    }
+    const moveSelectedMarker = () => {
+      if (markersSelectedCount === 1) {
+        markersList.value[changeMarkerIndex].dataIndex = currentIndex
+        markersList.value[changeMarkerIndex].value = chartData1.value[currentIndex]
+      }
     }
 
     const markerSelect = (marker) => {
-      let ind = getMarkerId(marker.value)
+      let ind = marker.id
       markersList.value[ind].isSelected = !markersList.value[ind].isSelected
+      if (markersList.value[ind].isSelected) {
+        markersSelectedCount++
+      } else {
+        markersSelectedCount--
+      }
+      if (markersSelectedCount === 1) {
+        changeMarkerValue()
+        markerEditing.value = true
+      } else {
+        markerEditing.value = false
+      }
+      updateChart()
+    }
+
+    const cancelMarkersSelect = () => {
+      markersList.value.forEach(item => item.isSelected = false)
+      markersSelectedCount = 0
+      markerEditing.value = false
       updateChart()
     }
 
     const setToMaximum = () => {
-      currentIndex = maximum
+      currentIndex = mainMaximum
+      moveSelectedMarker()
       updateChart()
     }
+
+    const setToMaximumRight = () => {
+      let index = -1
+      maximumList.some(item => {
+        if (currentIndex < item) {
+          index = item
+          return true
+        }
+      })
+      if (index !== -1) {
+        currentIndex = index
+        moveSelectedMarker()
+        updateChart()
+      }
+    }
+
+    const setToMaximumLeft = () => {
+      let index = -1
+      maximumList.forEach(item => {
+        if (currentIndex > item) {
+          index = item
+        }
+      })
+      if (index !== -1 && index - 1 >= 0) {
+        currentIndex = index
+        moveSelectedMarker()
+        updateChart()
+      }
+    }
+
     const rightSelectPoint = () => {
       if (currentIndex < chartData1.value.length - 1) {
         currentIndex++
       }
+      moveSelectedMarker()
       updateChart()
     }
     const leftSelectPoint = () => {
       if (currentIndex > 0) {
         currentIndex--
       }
+      moveSelectedMarker()
       updateChart()
     }
 
@@ -549,20 +649,21 @@ export default {
         case 'ArrowLeft':
           leftSelectPoint()
           break
-        case 'Enter':
-          saveMarkerValue()
-          break
       }
     }
 
     const clickHandler = () => {
-      let chart = chartRef.value.chartJSState.chart
-      const activeElement = chart.getActiveElements()[0]
-      if (activeElement.datasetIndex === 0) {
-        currentIndex = activeElement.index
-        chart.update()
+      if (markerEditing.value) {
+        let chart = chartRef.value.chartJSState.chart
+        const activeElement = chart.getActiveElements()[0]
+        if (activeElement.datasetIndex === 0) {
+          currentIndex = activeElement.index
+          moveSelectedMarker()
+          chart.update()
+        }
       }
     }
+
     const dblClickHandler = () => {
       let chart = chartRef.value.chartJSState.chart
       const activeElement = chart.getActiveElements()[0]
@@ -572,24 +673,30 @@ export default {
         saveMarkerValue()
       }
     }
+
+    const getFontSize = () => {
+      let width = chartRef.value.chartRef.width
+      return width / 76.8
+    }
+
     onMounted(() => {
-          document.addEventListener('keydown', keyHandler)
-          let chart = chartRef.value.chartJSState.chart
-          chart.canvas.addEventListener('click', clickHandler)
-          chart.canvas.addEventListener('dblclick', dblClickHandler)
-          chart.update()
-        }
-    )
+      document.addEventListener('keydown', keyHandler)
+      let chart = chartRef.value.chartJSState.chart
+      chart.canvas.addEventListener('click', clickHandler)
+      chart.canvas.addEventListener('dblclick', dblClickHandler)
+      chart.update()
+    })
+
     onUnmounted(() => {
-          document.removeEventListener('wheel', keyHandler)
-          chartRef.value.chartJSState.chart.canvas.removeEventListener('click', clickHandler)
-          chartRef.value.chartJSState.chart.canvas.removeEventListener('dblclick', dblClickHandler)
-        }
-    )
+      document.removeEventListener('wheel', keyHandler)
+      chartRef.value.chartJSState.chart.canvas.removeEventListener('click', clickHandler)
+      chartRef.value.chartJSState.chart.canvas.removeEventListener('dblclick', dblClickHandler)
+    })
 
     return {
       lineChart,
       chartRef,
+      containerRef,
       markerEditing,
       markersList,
       resetZoom,
@@ -601,10 +708,12 @@ export default {
       deleteMarker,
       changeMarkerValue,
       markerSelect,
-      setToMaximum
+      cancelMarkersSelect,
+      setToMaximum,
+      setToMaximumRight,
+      setToMaximumLeft
     }
-  }
-  ,
+  },
 }
 </script>
 
@@ -639,6 +748,7 @@ button:disabled:hover {
 }
 
 .chart-container {
+  font-size: 14px;
   color: #eaeaea;
   display: flex;
   flex-direction: column;
@@ -649,32 +759,77 @@ button:disabled:hover {
   border-top: 1px solid rgb(100, 100, 97);
   padding: 10px;
   display: grid;
+  justify-content: space-between;
   justify-items: center;
   align-items: center;
-  grid-template-columns: 80% 20%;
+  grid-template-columns: 20% 40% 20% 20%;
 }
 
-.markers {
-  width: 100%;
-  height: 100%;
-  display: flex;
-
-}
-
-.markers__markers-list {
+.markers-control {
   display: flex;
   flex-direction: column;
+  justify-content: center;
 }
 
-.markers__markers-list--item {
-  display: flex;
+.markers-control:only-child {
+  margin: 5px;
+}
+
+.markers-list {
+  font-size: 0.9em;
+  overflow: hidden;
+  min-width: 70%;
+}
+
+.markers-list__container {
+  height: 80px;
+  user-select: none;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.markers-list__container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.markers-list__container::-webkit-scrollbar-track {
+  border-radius: 4px;
+
+  box-shadow: inset 0px 0px 2px 0.3px #585a5c;
+}
+
+.markers-list__container::-webkit-scrollbar-thumb {
+  background-color: #585a5c;
+  border-radius: 4px;
+}
+
+.markers-list__item {
+  display: grid;
   align-items: center;
-  min-width: 30%;
   cursor: pointer;
   width: 100%;
+  grid-template-columns: 5% 85% 8%;
+  margin: 2px;
+  padding: 3px 5px;
+  border-radius: 4px;
 }
 
 .item-select {
-  background-color: red;
+  background-color: #bbbbbb;
+  color: #2b2b2b;
 }
+
+.set-control {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.chart-control {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+
 </style>
