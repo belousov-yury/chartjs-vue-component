@@ -1,5 +1,6 @@
 <template>
-  <LineChart class="test"/>
+  <button @click="changeTheme">Сменить тему</button>
+  <LineChart class="test" :dark-theme="isDark"/>
 </template>
 
 <script>
@@ -9,6 +10,16 @@ export default {
   components: {
     LineChart
   },
+  data () {
+    return {
+      isDark: false
+    }
+  },
+  methods: {
+    changeTheme () {
+      this.isDark = !this.isDark
+    }
+  }
 
 }
 </script>

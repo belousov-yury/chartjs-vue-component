@@ -1,5 +1,6 @@
 <template>
-  <div class="chart-container" ref="containerRef">
+  <div class="chart-container" :class="[darkTheme ? 'chart-container-dark': 'chart-container-light']"
+       ref="containerRef">
     <vue3-chart-js
         :id="lineChart.id"
         :type="lineChart.type"
@@ -9,10 +10,13 @@
         ref="chartRef"
 
     />
-    <div v-if="isControlPanel" class="control-container">
+    <div v-if="isControlPanel" class="control-container"
+         :class="[darkTheme ? 'control-container-dark': 'control-container-light']">
       <div class="markers-control">
-        <button @click="addMarker">Добавить маркер</button>
-        <button @click="cancelMarkersSelect">Отменить выделения</button>
+        <button @click="addMarker" :class="[darkTheme ? 'button-dark': 'button-light']">Добавить маркер</button>
+        <button @click="deleteAllMarker" :class="[darkTheme ? 'button-dark': 'button-light']">Удалить маркеры</button>
+        <button @click="cancelMarkersSelect" :class="[darkTheme ? 'button-dark': 'button-light']">Отменить выделения
+        </button>
       </div>
 
 
@@ -22,28 +26,41 @@
                :key="marker.id"
                class="markers-list__item"
                :class="{'item-select': marker?.isSelected}"
-               @click="markerSelect(marker)">
+               @click="markerSelect(marker)"
+               @dblclick="setZoomToMarker(marker)"
+          >
             <div :style="'background-color:' +  marker?.color"
-                 style="width: 15px; height: 15px; border-radius: 3px;"></div>
-            <div>
+                 style="width: 15px; height: 15px; border-radius: 3px;"
+                 class="markers-list__item--color"
+            >
+            </div>
+            <div class="markers-list__item--text">
               {{ marker.id + 1 }}.
               {{ xAxisName }}: {{ marker.value.x }} {{ xAxisUnit }},
               {{ yAxisName }}: {{ marker.value.y }} {{ yAxisUnit }}
             </div>
-            <button @click.stop="deleteMarker(marker)">✖</button>
+            <button class="markers-list__item--button" :class="[darkTheme ? 'button-dark': 'button-light']"
+                    @click.stop="deleteMarker(marker)">✖
+            </button>
           </div>
         </div>
+      </div>
 
+      <div v-if="isDelta" class="delta">
+        <div class="delta__item">{{ yAxisName }} (дельта): {{ delta.y }} {{ yAxisUnit }}</div>
+        <div class="delta__item">{{ xAxisName }} (дельта): {{ delta.x }} {{ xAxisUnit }}</div>
       </div>
 
       <div class="set-control">
-        <button @click="setToMaximum">Установить на максимум</button>
-        <button @click="setToMaximumLeft">Максимум влево</button>
-        <button @click="setToMaximumRight">Максимум вправо</button>
+        <button @click="setToMaximum" :class="[darkTheme ? 'button-dark': 'button-light']" :disabled="!markerEditing">Установить на максимум
+        </button>
+        <button @click="setToMaximumLeft" :class="[darkTheme ? 'button-dark': 'button-light']" :disabled="!markerEditing">Максимум влево</button>
+        <button @click="setToMaximumRight" :class="[darkTheme ? 'button-dark': 'button-light']" :disabled="!markerEditing">Максимум вправо</button>
       </div>
       <div class="chart-control">
-        <button @click="resetZoom">Сбросить масштаб</button>
-        <button @click="exportChartImage">Сохранить график</button>
+        <button @click="resetZoom" :class="[darkTheme ? 'button-dark': 'button-light']">Сбросить масштаб</button>
+        <button @click="changeInterpolation" :class="[darkTheme ? 'button-dark': 'button-light']">Интерполяция: {{isInterpolation ? 'вкл.' : 'выкл.'}}</button>
+        <button @click="exportChartImage" :class="[darkTheme ? 'button-dark': 'button-light']">Сохранить график</button>
       </div>
 
     </div>
@@ -55,7 +72,7 @@ import Vue3ChartJs from '@j-t-mcc/vue3-chartjs'
 import zoomPlugin from 'chartjs-plugin-zoom'
 import ChartDataLabels from 'chartjs-plugin-datalabels'
 import annotationPlugin from 'chartjs-plugin-annotation';
-import {onMounted, onUnmounted, ref, toRefs} from "vue";
+import {onMounted, onUnmounted, ref, toRefs, watch} from "vue";
 
 Vue3ChartJs.registerGlobalPlugins([zoomPlugin, ChartDataLabels, annotationPlugin])
 
@@ -67,32 +84,13 @@ export default {
   props: {
     chartData1: {
       type: Array,
-      default: () => [
-        {x: 0, y: 50},
-        {x: 2, y: 60},
-        {x: 4, y: 50},
-        {x: 6, y: 30},
-        {x: 20, y: 19},
-        {x: 22, y: 70},
-        {x: 24, y: 13},
-        {x: 26, y: 15},
-        {x: 42, y: 3},
-        {x: 44, y: 100},
-        {x: 46, y: 3},
-        {x: 48, y: 32},
-        {x: 60, y: 44},
-        {x: 62, y: 5},
-        {x: 64, y: 56},
-        {x: 66, y: 5},
-        {x: 80, y: 22},
-        {x: 82, y: 33},
-        {x: 84, y: 2},
-        {x: 86, y: 12},
-        {x: 102, y: 22},
-        {x: 104, y: 27},
-        {x: 106, y: 80},
-        {x: 108, y: 55},
-      ]
+      default: () => {
+        let arr = []
+        for(let i = 1; i < 500; i++) {
+          arr.push({x: i, y: Math.random() * 200})
+        }
+        return arr
+      }
     },
     chartData2: {
       type: Array,
@@ -125,6 +123,10 @@ export default {
     isControlPanel: {
       type: Boolean,
       default: true
+    },
+    darkTheme: {
+      type: Boolean,
+      default: false
     }
   },
   methods: {},
@@ -133,15 +135,39 @@ export default {
     const containerRef = ref(null)
 
     let markerEditing = ref(false)
+    let isDelta = ref(false)
+    let isInterpolation = ref(false)
 
-    const colors = [
+    const markersColors = [
       'rgb(255,211,41)',
       'rgb(38,90,255)',
       'rgb(255,93,51)',
       'rgb(227,41,160)',
-      'rgb(125,93,218)',
+      'rgb(132,0,255)',
       'rgb(89,255,203)'
     ]
+
+    const darkColors = {
+      chartBackground: 'rgb(60,63,64)',
+      legend: 'rgb(204,203,203)',
+      axis: 'rgb(204,203,203)',
+      grid: 'rgb(100,100,97)',
+      line: [
+        'rgb(43,171,0)',
+        'rgb(194,19,48)',
+      ]
+    }
+
+    const lightColors = {
+      chartBackground: 'rgb(255,255,255)',
+      legend: 'rgb(0,0,0)',
+      axis: 'rgb(0,0,0)',
+      grid: '#8d9091',
+      line: [
+        'rgb(88,149,44)',
+        'rgb(206,0,40)',
+      ]
+    }
 
     const {
       chartData1,
@@ -151,8 +177,11 @@ export default {
       xAxisUnit,
       yAxisUnit,
       legendName1,
-      legendName2
+      legendName2,
+      darkTheme
     } = toRefs(props)
+
+    watch(() => darkTheme.value, () => updateChart())
 
     const updateMaximumList = (data) => {
       maximumList = []
@@ -210,10 +239,16 @@ export default {
     let changeMarkerIndex = null
     let markersSelectedCount = 0
 
+    let delta = ref({
+      x: 0,
+      y: 0
+    })
+
     let datasets = []
     if (chartData1.value.length) datasets.push({
       label: legendName1.value,
       data: chartData1.value,
+      cubicInterpolationMode: () => isInterpolation.value ? 'monotone' : '',
     })
 
     if (chartData2.value.length) datasets.push({
@@ -247,8 +282,8 @@ export default {
         pointBorderColor: 'transparent',
         pointRadius: 4,
         borderColor: [
-          'rgb(88,149,44)',
-          'rgb(194,19,48)',
+          darkTheme.value ? darkColors.line[0] : lightColors.line[0],
+          darkTheme.value ? darkColors.line[1] : lightColors.line[1],
         ],
         pointBorderWidth: 3,
         borderWidth: 2,
@@ -259,36 +294,50 @@ export default {
         },
         scales: {
           x: {
-            title: {
-              display: true,
-              text: xAxisName.value + ',' + xAxisUnit.value,
-              color: 'rgb(204,203,203)'
+            title: () => {
+              return {
+                display: true,
+                text: xAxisName.value + ',' + xAxisUnit.value,
+                color: darkTheme.value ? darkColors.axis : lightColors.axis
+              }
             },
             min: chartData1.value[0]?.x - 1,
             max: chartData1.value[chartData1.value.length - 1]?.x + 1,
-            grid: {
-              color: 'rgb(100,100,97)',
-              z: 0,
-              tickColor: 'rgb(222,222,222)',
+            grid: () => {
+              return {
+                color: darkTheme.value ? darkColors.grid : lightColors.grid,
+                z: 0,
+                tickColor: darkTheme.value ? darkColors.axis : lightColors.axis
+              }
             },
             ticks: {
-              color: 'rgb(222,222,222)',
+              color: () => {
+                return darkTheme.value ? darkColors.axis : lightColors.axis
+              },
+              callback: (value) => value.toFixed(1)
             }
           },
           y: {
-            title: {
-              display: true,
-              text: yAxisName.value + ',' + yAxisUnit.value,
-              color: 'rgb(204,203,203)',
+            title: () => {
+              return {
+                display: true,
+                text: yAxisName.value + ',' + yAxisUnit.value,
+                color: darkTheme.value ? darkColors.axis : lightColors.axis,
+              }
             },
             ticks: {
-              color: 'rgb(222,222,222)',
+              color: () => {
+                return darkTheme.value ? darkColors.axis : lightColors.axis
+              },
+              callback: (value) => value.toFixed(1)
             },
             max: chartData1.value[getMaxIndex(chartData1.value)]?.y + 7,
-            grid: {
-              color: 'rgb(100,100,97)',
-              z: 0,
-              tickColor: 'rgb(222,222,222)'
+            grid: () => {
+              return {
+                color: darkTheme.value ? darkColors.grid : lightColors.grid,
+                z: 0,
+                tickColor: darkTheme.value ? darkColors.axis : lightColors.axis
+              }
             }
           },
         },
@@ -319,9 +368,11 @@ export default {
             }
           },
           legend: {
-            labels: {
-              color: 'rgb(204,203,203)',
-              boxHeight: 0,
+            labels: () => {
+              return {
+                color: darkTheme.value ? darkColors.legend : lightColors.legend,
+                boxHeight: 0
+              }
             }
             // onClick: () => console.log('kek')
           },
@@ -330,10 +381,10 @@ export default {
             displayColors: false,
             position: 'nearest',
             callbacks: {
-              title: (ctx) => {
-                return `${xAxisName.value}: ${ctx[0].label} ${xAxisUnit.value}\n${yAxisName.value}: ${ctx[0].formattedValue} ${yAxisUnit.value}`
+              label: (ctx) => {
+                return `${xAxisName.value}: ${ctx.label} ${xAxisUnit.value}\n`
               },
-              label: () => null
+              title: (ctx) => `${yAxisName.value}: ${ctx[0].formattedValue} ${yAxisUnit.value}`
             }
           },
           annotation: {
@@ -347,10 +398,9 @@ export default {
                 radius: () => {
                   return chartRef.value.chartRef.width / 160
                 },
-                rotation: 180,
                 scaleID: 'y',
                 yAdjust: () => {
-                  return -chartRef.value.chartRef.width / 80
+                  return chartRef.value.chartRef.width / 80
                 },
                 xValue: (ctx) => value(ctx, 1, 4, 'x'),
                 yValue: (ctx) => value(ctx, 1, 4, 'y')
@@ -362,8 +412,8 @@ export default {
               index: {
                 backgroundColor: 'rgba(0,0,0,0)',
                 borderRadius: 30,
-                textShadowBlur: 2,
-                textShadowColor: 'rgba(0,0,0,1)',
+                textStrokeWidth: 2,
+                textStrokeColor: 'rgba(0,0,0,0.7)',
                 align: 'end',
                 textAlign: 'center',
                 padding: {
@@ -371,13 +421,13 @@ export default {
                 },
                 borderColor: ctx => {
                   if (getMarker(ctx.dataIndex)?.isSelected) {
-                    return colors[getMarkerId(ctx.dataset.data[ctx.dataIndex])]
+                    return markersColors[getMarkerId(ctx.dataset.data[ctx.dataIndex])]
                   }
                   return 'rgba(0,0,0,0)'
                 },
                 borderWidth: ctx => {
                   if (getMarker(ctx.dataIndex)?.isSelected) {
-                    return 2
+                    return 3
                   }
                   return 0
                 },
@@ -395,7 +445,7 @@ export default {
                 },
                 color: (ctx) => {
                   if (isMarkerToIndex(ctx.dataIndex)) {
-                    return colors[getMarkerId(ctx.dataset.data[ctx.dataIndex])]
+                    return markersColors[getMarkerId(ctx.dataset.data[ctx.dataIndex])]
                   }
                 },
                 font: () => {
@@ -412,7 +462,8 @@ export default {
               mark: {
                 backgroundColor: 'rgba(0,0,0,0)',
                 borderRadius: 30,
-                textShadowColor: 'rgba(0,0,0,1)',
+                textStrokeWidth: 2,
+                textStrokeColor: 'rgba(0,0,0,0.7)',
                 align: 'end',
                 textAlign: 'center',
                 display: (ctx) => {
@@ -427,7 +478,7 @@ export default {
                 },
                 color: (ctx) => {
                   if (isMarkerToIndex(ctx.dataIndex)) {
-                    return colors[getMarkerId(ctx.dataset.data[ctx.dataIndex])]
+                    return markersColors[getMarkerId(ctx.dataset.data[ctx.dataIndex])]
                   }
                 },
                 font: () => {
@@ -449,7 +500,7 @@ export default {
           const ctx = chart.canvas.getContext('2d')
           ctx.save()
           ctx.globalCompositeOperation = 'destination-over'
-          ctx.fillStyle = 'rgb(60,63,64)'
+          ctx.fillStyle = darkTheme.value ? darkColors.chartBackground : lightColors.chartBackground
           ctx.fillRect(0, 0, chart.width, chart.height)
           ctx.restore()
         }
@@ -469,6 +520,14 @@ export default {
     //   })
     //   return flag
     // }
+
+    const calcDelta = () => {
+      let markers = markersList.value.filter(item => item.isSelected)
+      if (markers.length === 2) {
+        delta.value.x = Math.abs(markers[1].value.x - markers[0].value.x)
+        delta.value.y = Math.abs(markers[1].value.y - markers[0].value.y)
+      }
+    }
 
     const isMarkerToIndex = index => {
       let flag = false
@@ -511,6 +570,7 @@ export default {
 
     const addMarker = () => {
       if (markersList.value.length < 6) {
+        cancelMarkersSelect()
         saveMarkerValue()
         updateChart()
       } else {
@@ -523,11 +583,16 @@ export default {
       let delIndex = markersList.value.indexOf(marker)
       markersList.value.splice(delIndex, 1)
       markersList.value.forEach((item, index) => {
-        item.color = colors[index]
+        item.color = markersColors[index]
         item.id = index
       })
       updateChart()
+    }
 
+    const deleteAllMarker = () => {
+      cancelMarkersSelect()
+      markersList.value = []
+      updateChart()
     }
 
     const saveMarkerValue = () => {
@@ -537,7 +602,7 @@ export default {
           value: chartData1.value[currentIndex],
           isSelected: false,
           dataIndex: currentIndex,
-          color: colors[markersList.value.length]
+          color: markersColors[markersList.value.length]
         }
         markersList.value.push(newMarker)
         markerEditing.value = false
@@ -567,6 +632,8 @@ export default {
       let ind = marker.id
       markersList.value[ind].isSelected = !markersList.value[ind].isSelected
       if (markersList.value[ind].isSelected) {
+        let chart = chartRef.value.chartJSState.chart
+        chart.setActiveElements([{datasetIndex: 0, index: marker.dataIndex}])
         markersSelectedCount++
       } else {
         markersSelectedCount--
@@ -576,6 +643,12 @@ export default {
         markerEditing.value = true
       } else {
         markerEditing.value = false
+      }
+      if (markersSelectedCount === 2) {
+        isDelta.value = true
+        calcDelta()
+      } else {
+        isDelta.value = false
       }
       updateChart()
     }
@@ -588,37 +661,43 @@ export default {
     }
 
     const setToMaximum = () => {
-      currentIndex = mainMaximum
-      moveSelectedMarker()
-      updateChart()
-    }
-
-    const setToMaximumRight = () => {
-      let index = -1
-      maximumList.some(item => {
-        if (currentIndex < item) {
-          index = item
-          return true
-        }
-      })
-      if (index !== -1) {
-        currentIndex = index
+      if (markersSelectedCount === 1) {
+        currentIndex = mainMaximum
         moveSelectedMarker()
         updateChart()
       }
     }
 
-    const setToMaximumLeft = () => {
-      let index = -1
-      maximumList.forEach(item => {
-        if (currentIndex > item) {
-          index = item
+    const setToMaximumRight = () => {
+      if (markersSelectedCount === 1) {
+        let index = -1
+        maximumList.some(item => {
+          if (currentIndex < item) {
+            index = item
+            return true
+          }
+        })
+        if (index !== -1) {
+          currentIndex = index
+          moveSelectedMarker()
+          updateChart()
         }
-      })
-      if (index !== -1 && index - 1 >= 0) {
-        currentIndex = index
-        moveSelectedMarker()
-        updateChart()
+      }
+    }
+
+    const setToMaximumLeft = () => {
+      if (markersSelectedCount === 1) {
+        let index = -1
+        maximumList.forEach(item => {
+          if (currentIndex > item) {
+            index = item
+          }
+        })
+        if (index !== -1 && index - 1 >= 0) {
+          currentIndex = index
+          moveSelectedMarker()
+          updateChart()
+        }
       }
     }
 
@@ -629,6 +708,7 @@ export default {
       moveSelectedMarker()
       updateChart()
     }
+
     const leftSelectPoint = () => {
       if (currentIndex > 0) {
         currentIndex--
@@ -649,34 +729,61 @@ export default {
         case 'ArrowLeft':
           leftSelectPoint()
           break
+        case 'Escape':
+          cancelMarkersSelect()
       }
     }
 
     const clickHandler = () => {
-      if (markerEditing.value) {
-        let chart = chartRef.value.chartJSState.chart
-        const activeElement = chart.getActiveElements()[0]
-        if (activeElement.datasetIndex === 0) {
-          currentIndex = activeElement.index
-          moveSelectedMarker()
-          chart.update()
-        }
-      }
-    }
-
-    const dblClickHandler = () => {
       let chart = chartRef.value.chartJSState.chart
       const activeElement = chart.getActiveElements()[0]
-      if (activeElement.datasetIndex === 0) {
+      let lastIndex = currentIndex
+      if (activeElement?.datasetIndex === 0) {
         currentIndex = activeElement.index
-        markerEditing.value = true
-        saveMarkerValue()
+      }
+      if (markerEditing.value) {
+        if (lastIndex !== currentIndex) {
+          moveSelectedMarker()
+        } else {
+          let marker = getMarker(currentIndex)
+          if (!marker.isSelected) cancelMarkersSelect()
+          markerSelect(marker)
+        }
+      } else {
+        if (isMarkerToIndex(currentIndex)) {
+          markerSelect(getMarker(currentIndex))
+        }
+      }
+      chart.update()
+    }
+
+    const dblClickHandler = (e) => {
+      if (!markerEditing.value) {
+        e.preventDefault()
+        let chart = chartRef.value.chartJSState.chart
+        const activeElement = chart.getActiveElements()[0]
+        if (activeElement?.datasetIndex === 0) {
+          currentIndex = activeElement.index
+          markerEditing.value = true
+          saveMarkerValue()
+        }
       }
     }
 
     const getFontSize = () => {
       let width = chartRef.value.chartRef.width
       return width / 76.8
+    }
+
+    const changeInterpolation = () => {
+      isInterpolation.value = !isInterpolation.value
+      updateChart()
+    }
+
+    const setZoomToMarker = (marker) => {
+      let chart = chartRef.value.chartJSState.chart
+      chart.zoomScale('x',{min: marker.value.x - 50, max: marker.value.x + 50,},'default')
+      chart.zoomScale('y',{min: marker.value.y - 50, max: marker.value.y + 50,},'default')
     }
 
     onMounted(() => {
@@ -699,6 +806,9 @@ export default {
       containerRef,
       markerEditing,
       markersList,
+      delta,
+      isDelta,
+      isInterpolation,
       resetZoom,
       exportChartImage,
       rightSelectPoint,
@@ -706,12 +816,15 @@ export default {
       addMarker,
       saveMarkerValue,
       deleteMarker,
+      deleteAllMarker,
       changeMarkerValue,
       markerSelect,
       cancelMarkersSelect,
       setToMaximum,
       setToMaximumRight,
-      setToMaximumLeft
+      setToMaximumLeft,
+      setZoomToMarker,
+      changeInterpolation
     }
   },
 }
@@ -719,28 +832,55 @@ export default {
 
 <style scoped>
 button {
-  border: 1px solid #3c3f40;
   border-radius: 3px;
-  background-color: #585a5c;
-  color: #eaeaea;
   padding: 4px 5px 5px 5px;
   transition: all 70ms;
   font-size: 0.9em;
   height: 25px;
 }
 
-button:hover {
+.button-dark {
+  border: 1px solid #3c3f40;
+  background-color: #585a5c;
+  color: #eaeaea;
+}
+
+.button-light {
+  border: 1px solid #3c3f40;
+  background-color: #f3f3f3;
+  color: #0c0c0c;
+}
+
+.button-dark:hover {
+  box-shadow: 0 0 2px 1px rgb(100, 100, 100);
+}
+
+.button-light:hover {
   box-shadow: 0 0 2px 1px rgb(100, 100, 100);
 }
 
 button:active {
-  box-shadow: inset 0 0 15px 1px #2b2b2b;
   transform: translateY(1px);
 }
 
+.button-dark:active {
+  box-shadow: inset 0 0 15px 1px #2b2b2b;
+}
+
+.button-light:active {
+  box-shadow: inset 0 0 15px 1px #2b2b2b;
+}
+
 button:disabled {
-  background-color: #2b2b2b;
   opacity: 0.7;
+}
+
+.button-dark:disabled {
+  background-color: #2b2b2b;
+}
+
+.button-light:disabled {
+  background-color: #2b2b2b;
 }
 
 button:disabled:hover {
@@ -749,20 +889,33 @@ button:disabled:hover {
 
 .chart-container {
   font-size: 14px;
-  color: #eaeaea;
   display: flex;
   flex-direction: column;
 }
 
+.chart-container-dark {
+  color: #eaeaea;
+}
+
+.chart-container-light {
+  color: #0c0c0c;
+}
+
 .control-container {
-  background-color: rgb(60, 63, 64);
-  border-top: 1px solid rgb(100, 100, 97);
   padding: 10px;
-  display: grid;
-  justify-content: space-between;
+  display: flex;
+  justify-content: space-around;
   justify-items: center;
   align-items: center;
-  grid-template-columns: 20% 40% 20% 20%;
+}
+
+.control-container-dark {
+  background-color: rgb(60, 63, 64);
+  border-top: 1px solid rgb(100, 100, 97);
+}
+
+.control-container-light {
+  border-top: 1px solid rgb(100, 100, 97);
 }
 
 .markers-control {
@@ -771,14 +924,14 @@ button:disabled:hover {
   justify-content: center;
 }
 
-.markers-control:only-child {
-  margin: 5px;
+.markers-control button {
+  margin: 5px 0;
 }
 
 .markers-list {
   font-size: 0.9em;
   overflow: hidden;
-  min-width: 70%;
+  width: 25%;
 }
 
 .markers-list__container {
@@ -786,6 +939,9 @@ button:disabled:hover {
   user-select: none;
   overflow-y: auto;
   overflow-x: hidden;
+  padding: 5px 0;
+  box-shadow: inset 0 0 2px 0.3px #585a5c;
+  border-radius: 4px;
 }
 
 .markers-list__container::-webkit-scrollbar {
@@ -795,7 +951,7 @@ button:disabled:hover {
 .markers-list__container::-webkit-scrollbar-track {
   border-radius: 4px;
 
-  box-shadow: inset 0px 0px 2px 0.3px #585a5c;
+  box-shadow: inset 0 0 2px 0.3px #585a5c;
 }
 
 .markers-list__container::-webkit-scrollbar-thumb {
@@ -808,15 +964,42 @@ button:disabled:hover {
   align-items: center;
   cursor: pointer;
   width: 100%;
-  grid-template-columns: 5% 85% 8%;
-  margin: 2px;
+  grid-template-columns: 10% 75% 15%;
   padding: 3px 5px;
   border-radius: 4px;
+}
+
+.markers-list__item--color {
+  margin: 5px;
+}
+
+.markers-list__item--text {
+  margin-left: 7px;
+}
+
+.markers-list__item--button {
+  width: 25px;
+  height: 25px;
+  margin-left: 5px;
+  justify-self: center;
 }
 
 .item-select {
   background-color: #bbbbbb;
   color: #2b2b2b;
+}
+
+.delta {
+  font-size: 0.9em;
+  height: 100%;
+  display: flex;
+  justify-content: space-between;
+  flex-direction: column;
+  align-items: center;
+}
+
+.delta__item {
+  margin: 5px 0;
 }
 
 .set-control {
@@ -825,10 +1008,18 @@ button:disabled:hover {
   justify-content: center;
 }
 
+.set-control button {
+  margin: 5px 0;
+}
+
 .chart-control {
   display: flex;
   flex-direction: column;
   justify-content: center;
+}
+
+.chart-control button {
+  margin: 5px 0;
 }
 
 
